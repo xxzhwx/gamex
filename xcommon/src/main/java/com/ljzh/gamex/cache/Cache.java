@@ -18,9 +18,9 @@ public abstract class Cache<K, V> {
     }
 
     Cache(String name,
-                   int maxEntriesLocalHeap,
-                   int timeToIdleSeconds,
-                   int timeToLiveSeconds) {
+          int maxEntriesLocalHeap,
+          int timeToIdleSeconds,
+          int timeToLiveSeconds) {
         cache = new net.sf.ehcache.Cache(new CacheConfiguration()
                 .name(name)
                 .eternal(false)
