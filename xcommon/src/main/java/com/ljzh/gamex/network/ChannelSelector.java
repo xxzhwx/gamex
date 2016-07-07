@@ -15,15 +15,15 @@ import java.util.Set;
 
 public class ChannelSelector extends Thread {
     public interface ReadHandler {
-        void onRead(SocketChannel sc, ByteBuffer buffer);
+        void onRead(SocketChannel channel, Object attachment, ByteBuffer buffer);
     }
 
     public interface WriteHandler {
-        void onWritable(SocketChannel sc);
+        void onWritable(SocketChannel channel, Object attachment, SelectionKey selectionKey);
     }
 
     public interface CloseHandler {
-        void onClose(SocketChannel sc, String reason);
+        void onClose(SocketChannel channel, Object attachment, String reason);
     }
 
     public void initialize() throws IOException {
@@ -43,9 +43,9 @@ public class ChannelSelector extends Thread {
         this.closeHandler = closeHandler;
     }
 
-    public void registerChannel(SocketChannel sc) {
+    public void registerChannel(SocketChannel channel) {
         synchronized (newChannels) {
-            newChannels.add(sc);
+            newChannels.add(channel);
         }
     }
 
@@ -67,11 +67,12 @@ public class ChannelSelector extends Thread {
                     it.remove();
 
                     if (key.isValid()) {
-                        SocketChannel sc = (SocketChannel) key.channel();
+                        SocketChannel channel = (SocketChannel) key.channel();
+                        Object attachment = key.attachment();
                         if (key.isReadable()) {
-                            __handleRead(sc);
+                            __handleRead(channel, attachment);
                         } else if (key.isWritable()) {
-                            __handleWrite(key, sc);
+                            __handleWrite(key, channel, attachment);
                         } else {
                             CommonLogger.error("illegal key state");
                         }
@@ -94,44 +95,44 @@ public class ChannelSelector extends Thread {
             newChannels.clear();
         }
 
-        for (SocketChannel sc : channels) {
+        for (SocketChannel channel : channels) {
             try {
-                sc.register(selector, SelectionKey.OP_READ);
+                channel.register(selector, SelectionKey.OP_READ);
             } catch (ClosedChannelException e) {
                 CommonLogger.error(e, "register");
             }
         }
     }
 
-    private void __handleRead(SocketChannel sc) {
+    private void __handleRead(SocketChannel channel, Object attachment) {
         ByteBuffer buffer = ByteBuffer.allocate(256);
         try {
             int readBytes;
-            while ((readBytes = sc.read(buffer)) > 0) {
+            while ((readBytes = channel.read(buffer)) > 0) {
                 buffer.flip();
-                readHandler.onRead(sc, buffer);
+                readHandler.onRead(channel, attachment, buffer);
                 buffer = ByteBuffer.allocate(256);
             }
 
             if (readBytes == -1) {
-                __closeChannel(sc, "disconnect by peer.");
+                __closeChannel(channel, attachment, "disconnect by peer.");
             }
         } catch (IOException e) {
             CommonLogger.error(e, "read");
-            __closeChannel(sc, "read error.");
+            __closeChannel(channel, attachment, "read error.");
         }
     }
 
-    private void __handleWrite(SelectionKey key, SocketChannel sc) {
+    private void __handleWrite(SelectionKey key, SocketChannel channel, Object attachment) {
         key.interestOps(SelectionKey.OP_READ);
-        writeHandler.onWritable(sc);
+        writeHandler.onWritable(channel, attachment, key);
     }
 
-    private void __closeChannel(SocketChannel sc, String reason) {
-        closeHandler.onClose(sc, reason);
+    private void __closeChannel(SocketChannel channel, Object attachment, String reason) {
+        closeHandler.onClose(channel, attachment, reason);
 
         try {
-            sc.close();
+            channel.close();
         } catch (IOException e) {
             CommonLogger.error(e, "close channel");
         }
